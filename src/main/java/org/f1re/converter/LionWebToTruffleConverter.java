@@ -1,5 +1,6 @@
 package org.f1re.converter;
 
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.nodes.Node;
@@ -9,12 +10,11 @@ import com.oracle.truffle.sl.nodes.SLRootNode;
 import com.oracle.truffle.sl.nodes.SLStatementNode;
 import com.oracle.truffle.sl.nodes.controlflow.*;
 import com.oracle.truffle.sl.nodes.expression.*;
-import com.oracle.truffle.sl.runtime.SLStrings;
-import io.lionweb.lioncore.java.model.ReferenceValue;
-import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.sl.nodes.local.SLReadArgumentNode;
 import com.oracle.truffle.sl.nodes.local.SLReadLocalVariableNodeGen;
 import com.oracle.truffle.sl.nodes.local.SLWriteLocalVariableNodeGen;
-import com.oracle.truffle.sl.nodes.local.SLReadArgumentNode;
+import com.oracle.truffle.sl.runtime.SLStrings;
+import io.lionweb.lioncore.java.model.ReferenceValue;
 
 import java.util.*;
 
@@ -45,6 +45,7 @@ public class LionWebToTruffleConverter extends BaseConverter {
     private final FrameDescriptor.Builder frameDescriptorBuilder;
     private final Map<TruffleString, RootCallTarget> allFunctions;
     private int parameterCount;
+
     public LionWebToTruffleConverter(List<io.lionweb.lioncore.java.model.Node> lwNodes) {
         super(lwNodes);
         this.frameDescriptorBuilder = FrameDescriptor.newBuilder();
@@ -129,7 +130,7 @@ public class LionWebToTruffleConverter extends BaseConverter {
     protected <T extends Node> T convert(io.lionweb.lioncore.java.model.Node lwNode) {
         String classifierName = lwNode.getClassifier().getName();
 
-        switch (Objects.requireNonNull(classifierName)){
+        switch (Objects.requireNonNull(classifierName)) {
             case "MainFunction":
                 //startBlock();
                 List<SLStatementNode> methodNodes = new ArrayList<>();
@@ -166,14 +167,14 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 List<SLExpressionNode> argNodes = new ArrayList<>();
                 List<? extends io.lionweb.lioncore.java.model.Node> funCallArguments =
                         lwNode.getChildren(lwNode.getClassifier().getContainmentByName("arguments"));
-                for (io.lionweb.lioncore.java.model.Node arg: funCallArguments){
+                for (io.lionweb.lioncore.java.model.Node arg : funCallArguments) {
                     argNodes.add(convert(arg));
                 }
                 SLExpressionNode[] argumentNodes = argNodes.toArray(new SLExpressionNode[0]);
                 List<ReferenceValue> targetFunctionReferences = lwNode.getReferenceValues(Objects.requireNonNull(
                         lwNode.getClassifier().getReferenceByName("target")));
                 String resolveTargetInfo = null;
-                for (ReferenceValue ref: targetFunctionReferences){
+                for (ReferenceValue ref : targetFunctionReferences) {
                     resolveTargetInfo = ref.getResolveInfo();
                 }
                 SLExpressionNode slFunctionLiteralNode =
@@ -185,13 +186,13 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 List<SLStatementNode> bodyNodes = new ArrayList<>();
                 List<? extends io.lionweb.lioncore.java.model.Node> statements = lwNode.getChildren(
                         lwNode.getClassifier().getContainmentByName("statements"));
-                for (io.lionweb.lioncore.java.model.Node statement: statements){
+                for (io.lionweb.lioncore.java.model.Node statement : statements) {
                     bodyNodes.add(convert(statement));
                 }
                 List<SLStatementNode> flattenedNodes = new ArrayList<>(bodyNodes.size());
                 flattenBlocks(bodyNodes, flattenedNodes);
                 return (T) new SLBlockNode(flattenedNodes.toArray(new SLStatementNode[0]));
-                //return (T) new SLBlockNode(bodyNodes.toArray(new SLStatementNode[0]));
+            //return (T) new SLBlockNode(bodyNodes.toArray(new SLStatementNode[0]));
 
             case "WriteLocalVariableStatement":
                 SLExpressionNode valueNode = convert(
@@ -205,7 +206,7 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 List<ReferenceValue> referenceValues = lwNode.getReferenceValues(
                         Objects.requireNonNull(lwNode.getClassifier().getReferenceByName("variable")));
                 String resolveInfo = null;
-                for (ReferenceValue ref: referenceValues){
+                for (ReferenceValue ref : referenceValues) {
                     resolveInfo = ref.getResolveInfo();
                 }
                 SLExpressionNode nameTargetNode = new SLStringLiteralNode(SLStrings.fromJavaString(resolveInfo));
@@ -219,11 +220,10 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 List<? extends io.lionweb.lioncore.java.model.Node> elseNode = lwNode.getChildren(
                         lwNode.getClassifier().getContainmentByName("else"));
 
-                if (!elseNode.isEmpty()){
+                if (!elseNode.isEmpty()) {
                     SLStatementNode elsePartNode = convert(elseNode.getFirst());
                     return (T) new SLIfNode(ifConditionNode, thenPartNode, elsePartNode);
-                }
-                else
+                } else
                     return (T) new SLIfNode(ifConditionNode, thenPartNode, null);
 
             case "WhileStatement":
@@ -260,7 +260,7 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 return (T) new SLLongLiteralNode(value);
 
             case "StringLiteral":
-                TruffleString truffleString  = SLStrings.fromJavaString(Objects.requireNonNull(
+                TruffleString truffleString = SLStrings.fromJavaString(Objects.requireNonNull(
                         lwNode.getClassifier().getPropertyByName("value")).toString());
                 return (T) new SLStringLiteralNode(truffleString);
 
@@ -270,6 +270,7 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 return (T) new SLReturnNode(slExpressionNode);
             default:
         }
+
         throw new IllegalStateException("unknown classifier: %s".formatted(classifierName));
     }
 
