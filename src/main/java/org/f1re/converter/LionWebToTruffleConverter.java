@@ -67,14 +67,6 @@ public class LionWebToTruffleConverter extends BaseConverter {
         }
     }
 
-    public SLExpressionNode createCall(SLExpressionNode functionNode, List<SLExpressionNode> parameterNodes) {
-        if (functionNode == null || containsNull(parameterNodes)) {
-            return null;
-        }
-        return new SLInvokeNode(
-                functionNode, parameterNodes.toArray(new SLExpressionNode[parameterNodes.size()]));
-    }
-
     public SLExpressionNode createAssignment(SLExpressionNode nameNode, SLExpressionNode valueNode) {
         return createAssignment(nameNode, valueNode, null);
     }
@@ -132,24 +124,22 @@ public class LionWebToTruffleConverter extends BaseConverter {
 
         switch (Objects.requireNonNull(classifierName)) {
             case "MainFunction":
-                //startBlock();
                 List<SLStatementNode> methodNodes = new ArrayList<>();
                 String methodName = String.valueOf(lwNode.getPropertyValue(lwNode.getClassifier().getPropertyByName("name")));
-                //add arguments
+
                 List<? extends io.lionweb.lioncore.java.model.Node> arguments = lwNode.getChildren(
                         lwNode.getClassifier().getContainmentByName("arguments"));
                 if (!arguments.isEmpty())
                     methodNodes.add(convert(arguments.getFirst()));
-                // add body
-                methodNodes.add(convert(lwNode.getChildren(lwNode.getClassifier().getContainmentByName("body")).getFirst()));
+
+                methodNodes.add(convert(getNode(lwNode, "body")));
                 final SLStatementNode methodBlock = new SLBlockNode(methodNodes.toArray(new SLStatementNode[0]));
                 final SLFunctionBodyNode functionBodyNode = new SLFunctionBodyNode(methodBlock);
+
                 SLRootNode slRootNode = new SLRootNode(
                         null, frameDescriptorBuilder.build(), functionBodyNode, null, SLStrings.fromJavaString(methodName));
                 allFunctions.put(SLStrings.fromJavaString(methodName), slRootNode.getCallTarget());
                 parameterCount = 0;
-                // frameDescriptorBuilder = null;
-                //lexicalScope = null;
                 return (T) slRootNode;
 
             case "FunctionArgument":
@@ -179,7 +169,6 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 }
                 SLExpressionNode slFunctionLiteralNode =
                         new SLFunctionLiteralNode(SLStrings.fromJavaString(resolveTargetInfo));
-
                 return (T) new SLInvokeNode(slFunctionLiteralNode, argumentNodes);
 
             case "Block":
@@ -192,11 +181,10 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 List<SLStatementNode> flattenedNodes = new ArrayList<>(bodyNodes.size());
                 flattenBlocks(bodyNodes, flattenedNodes);
                 return (T) new SLBlockNode(flattenedNodes.toArray(new SLStatementNode[0]));
-            //return (T) new SLBlockNode(bodyNodes.toArray(new SLStatementNode[0]));
 
             case "WriteLocalVariableStatement":
                 SLExpressionNode valueNode = convert(
-                        lwNode.getChildren(lwNode.getClassifier().getContainmentByName("value")).getFirst());
+                        getNode(lwNode, "value"));
                 String variableName = String.valueOf(
                         lwNode.getPropertyValue(lwNode.getClassifier().getPropertyByName("name")));
                 SLExpressionNode nameNode = new SLStringLiteralNode(SLStrings.fromJavaString(variableName));
@@ -213,10 +201,8 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 return (T) createRead(nameTargetNode);
 
             case "IfStatement":
-                SLExpressionNode ifConditionNode = convert(lwNode.getChildren(
-                        lwNode.getClassifier().getContainmentByName("condition")).getFirst());
-                SLStatementNode thenPartNode = convert(lwNode.getChildren(
-                        lwNode.getClassifier().getContainmentByName("then")).getFirst());
+                SLExpressionNode ifConditionNode = convert(getNode(lwNode, "condition"));
+                SLStatementNode thenPartNode = convert(getNode(lwNode, "then"));
                 List<? extends io.lionweb.lioncore.java.model.Node> elseNode = lwNode.getChildren(
                         lwNode.getClassifier().getContainmentByName("else"));
 
@@ -227,32 +213,22 @@ public class LionWebToTruffleConverter extends BaseConverter {
                     return (T) new SLIfNode(ifConditionNode, thenPartNode, null);
 
             case "WhileStatement":
-                SLExpressionNode whileConditionNode = convert(lwNode.getChildren(
-                        lwNode.getClassifier().getContainmentByName("condition")).getFirst());
-                SLStatementNode bodyNode = convert(lwNode.getChildren(
-                        lwNode.getClassifier().getContainmentByName("body")).getFirst());
+                SLExpressionNode whileConditionNode = convert(getNode(lwNode, "condition"));
+                SLStatementNode bodyNode = convert(getNode(lwNode, "body"));
                 return (T) new SLWhileNode(whileConditionNode, bodyNode);
 
             case "AddExpression":
                 return (T) SLAddNodeGen.create(
-                        convert(lwNode.getChildren(
-                                lwNode.getClassifier().getContainmentByName("lhs")).getFirst()),
-                        convert(lwNode.getChildren(
-                                lwNode.getClassifier().getContainmentByName("rhs")).getFirst()));
+                        convert(getNode(lwNode, "lhs")),
+                        convert(getNode(lwNode, "rhs")));
 
             case "SubExpression":
                 return (T) SLSubNodeGen.create(
-                        convert(lwNode.getChildren(
-                                lwNode.getClassifier().getContainmentByName("lhs")).getFirst()),
-                        convert(lwNode.getChildren(
-                                lwNode.getClassifier().getContainmentByName("rhs")).getFirst()));
+                        convert(getNode(lwNode, "lhs")),
+                        convert(getNode(lwNode, "rhs")));
 
             case "LessThanExpression":
-                return (T) SLLessThanNodeGen.create(
-                        convert(lwNode.getChildren(
-                                lwNode.getClassifier().getContainmentByName("lhs")).getFirst()),
-                        convert(lwNode.getChildren(
-                                lwNode.getClassifier().getContainmentByName("rhs")).getFirst()));
+                return (T) SLLessThanNodeGen.create(convert(getNode(lwNode, "lhs")), convert(getNode(lwNode, "rhs")));
 
             case "LongLiteral":
                 long value = Long.parseLong(
@@ -265,8 +241,7 @@ public class LionWebToTruffleConverter extends BaseConverter {
                 return (T) new SLStringLiteralNode(truffleString);
 
             case "ReturnStatement":
-                SLExpressionNode slExpressionNode = convert(lwNode.getChildren(
-                        lwNode.getClassifier().getContainmentByName("value")).getFirst());
+                SLExpressionNode slExpressionNode = convert(getNode(lwNode, "value"));
                 return (T) new SLReturnNode(slExpressionNode);
             default:
         }
@@ -274,17 +249,8 @@ public class LionWebToTruffleConverter extends BaseConverter {
         throw new IllegalStateException("unknown classifier: %s".formatted(classifierName));
     }
 
-    public SLExpressionNode createStringLiteral(TruffleString literalToken) {
-        return new SLStringLiteralNode(literalToken);
-    }
-
-    private static boolean containsNull(List<?> list) {
-        for (Object e : list) {
-            if (e == null) {
-                return true;
-            }
-        }
-        return false;
+    private static io.lionweb.lioncore.java.model.Node getNode(io.lionweb.lioncore.java.model.Node lwNode, String lhs) {
+        return lwNode.getChildren(lwNode.getClassifier().getContainmentByName(lhs)).getFirst();
     }
 }
 
